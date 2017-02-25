@@ -69,6 +69,7 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
 
  function main()
   local opt = cmd:parse(arg)
+  print(opt)
 
   -- Parse layer strings and weights
   opt.content_layers, opt.content_weights =
