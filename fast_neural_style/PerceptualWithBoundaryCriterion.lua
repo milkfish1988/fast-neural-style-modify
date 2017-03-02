@@ -1,3 +1,8 @@
+--[[
+Modified from PerceptualCriterion.lua
+Aim to add boundary loss
+]]--
+
 require 'torch'
 require 'nn'
 
@@ -8,7 +13,7 @@ require 'fast_neural_style.DeepDreamLoss'
 local layer_utils = require 'fast_neural_style.layer_utils'
 
 
-local crit, parent = torch.class('nn.PerceptualCriterion', 'nn.Criterion')
+local crit, parent = torch.class('nn.PerceptualWithBoundaryCriterion', 'nn.Criterion')
 
 
 --[[
@@ -26,14 +31,23 @@ Input: args is a table with the following keys:
 --]]
 function crit:__init(args)
   args.content_layers = args.content_layers or {}
+  args.boundary_layers = args.boundary_layers or {}
   args.style_layers = args.style_layers or {}
   args.deepdream_layers = args.deepdream_layers or {}
   
   self.net = args.cnn
   self.net:evaluate()
+  self.net_boundary = args.cnn_boundary
+  self.net_boundary:evaluate()
   self.content_loss_layers = {}
+  self.boundary_loss_layers = {}
   self.style_loss_layers = {}
   self.deepdream_loss_layers = {}
+
+  print('display loss layers')
+  print(args.content_layers)
+  print(args.style_layers)
+  print(args.boundary_layers)
 
   -- Set up content loss layers
   for i, layer_string in ipairs(args.content_layers) do
@@ -41,6 +55,14 @@ function crit:__init(args)
     local content_loss_layer = nn.ContentLoss(weight, args.loss_type)
     layer_utils.insert_after(self.net, layer_string, content_loss_layer)
     table.insert(self.content_loss_layers, content_loss_layer)
+  end
+
+  -- Set up boundary loss layers
+  for i, layer_string in ipairs(args.boundary_layers) do
+    local weight = args.boundary_weights[i]
+    local boundary_loss_layer = nn.ContentLoss(weight, args.loss_type)
+    layer_utils.insert_after(self.net_boundary, layer_string, boundary_loss_layer)
+    table.insert(self.boundary_loss_layers, boundary_loss_layer)
   end
 
   -- Set up style loss layers
@@ -60,7 +82,9 @@ function crit:__init(args)
   end
   
   layer_utils.trim_network(self.net)
+  layer_utils.trim_network(self.net_boundary)
   self.grad_net_output = torch.Tensor()
+  self.grad_net_boundary_output = torch.Tensor()
 
 end
 
@@ -75,6 +99,9 @@ function crit:setStyleTarget(target)
   for i, style_loss_layer in ipairs(self.style_loss_layers) do
     style_loss_layer:setMode('capture')
   end
+  for i, boundary_loss_layer in ipairs(self.boundary_loss_layers) do
+    boundary_loss_layer:setMode('none')
+  end  
   self.net:forward(target)
 end
 
@@ -89,7 +116,26 @@ function crit:setContentTarget(target)
   for i, content_loss_layer in ipairs(self.content_loss_layers) do
     content_loss_layer:setMode('capture')
   end
+  for i, boundary_loss_layer in ipairs(self.boundary_loss_layers) do
+    boundary_loss_layer:setMode('none')
+  end
   self.net:forward(target)
+end
+
+--[[
+target: Tensor of shape (N, 3, H, W) giving pixels for content target images
+--]]
+function crit:setBoundaryTarget(target)
+  for i, style_loss_layer in ipairs(self.style_loss_layers) do
+    style_loss_layer:setMode('none')
+  end
+  for i, content_loss_layer in ipairs(self.content_loss_layers) do
+    content_loss_layer:setMode('none')
+  end
+  for i, boundary_loss_layer in ipairs(self.boundary_loss_layers) do
+    boundary_loss_layer:setMode('capture')
+  end
+  self.net_boundary:forward(target)
 end
 
 
@@ -106,6 +152,12 @@ function crit:setContentWeight(weight)
   end
 end
 
+function crit:setBoundaryWeight(weight)
+  for i, boundary_loss_layer in ipairs(self.boundary_loss_layers) do
+    boundary_loss_layer.strength = weight
+  end
+end
+
 
 --[[
 Inputs:
@@ -118,6 +170,9 @@ function crit:updateOutput(input, target)
   if target.content_target then
     self:setContentTarget(target.content_target)
   end
+  if target.boundary_target then
+    self:setBoundaryTarget(target.boundary_target)
+  end  
   if target.style_target then
     self.setStyleTarget(target.style_target)
   end
@@ -127,36 +182,49 @@ function crit:updateOutput(input, target)
   for i, content_loss_layer in ipairs(self.content_loss_layers) do
     content_loss_layer:setMode('loss')
   end
+  for i, boundary_loss_layer in ipairs(self.boundary_loss_layers) do
+    boundary_loss_layer:setMode('loss')
+  end  
   for i, style_loss_layer in ipairs(self.style_loss_layers) do
     style_loss_layer:setMode('loss')
   end
 
   local output = self.net:forward(input)
+  local output_boundary = self.net_boundary:forward(input)
 
   -- Set up a tensor of zeros to pass as gradient to net in backward pass
   self.grad_net_output:resizeAs(output):zero()
+  self.grad_net_boundary_output:resizeAs(output_boundary):zero()
 
   -- Go through and add up losses
   self.total_content_loss = 0
   self.content_losses = {}
+  self.total_boundary_loss = 0
+  self.boundary_losses = {}
   self.total_style_loss = 0
   self.style_losses = {}
   for i, content_loss_layer in ipairs(self.content_loss_layers) do
     self.total_content_loss = self.total_content_loss + content_loss_layer.loss
     table.insert(self.content_losses, content_loss_layer.loss)
   end
+  for i, boundary_loss_layer in ipairs(self.boundary_loss_layers) do
+    self.total_boundary_loss = self.total_boundary_loss + boundary_loss_layer.loss
+    table.insert(self.boundary_losses, boundary_loss_layer.loss)
+  end  
   for i, style_loss_layer in ipairs(self.style_loss_layers) do
     self.total_style_loss = self.total_style_loss + style_loss_layer.loss
     table.insert(self.style_losses, style_loss_layer.loss)
   end
   
-  self.output = self.total_style_loss + self.total_content_loss
+  self.output = self.total_style_loss + self.total_content_loss + self.total_boundary_loss
   return self.output
 end
 
 
 function crit:updateGradInput(input, target)
   self.gradInput = self.net:updateGradInput(input, self.grad_net_output)
+  self.gradInput_boundary = self.net_boundary:updateGradInput(input, self.grad_net_boundary_output)
+  self.gradInput = self.gradInput + self.gradInput_boundary
   return self.gradInput
 end
 

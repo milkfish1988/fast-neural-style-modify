@@ -1,0 +1,28 @@
+require 'cudnn'
+local model = {}
+-- warning: module 'input [type Input]' not found
+table.insert(model, {'conv1_1', cudnn.SpatialConvolution(3, 64, 3, 3, 1, 1, 35, 35, 1)})
+table.insert(model, {'relu1_1', cudnn.ReLU(true)})
+table.insert(model, {'conv1_2', cudnn.SpatialConvolution(64, 64, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu1_2', cudnn.ReLU(true)})
+table.insert(model, {'pool1', cudnn.SpatialMaxPooling(2, 2, 2, 2, 0, 0):ceil()})
+table.insert(model, {'conv2_1', cudnn.SpatialConvolution(64, 128, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu2_1', cudnn.ReLU(true)})
+table.insert(model, {'conv2_2', cudnn.SpatialConvolution(128, 128, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu2_2', cudnn.ReLU(true)})
+table.insert(model, {'pool2', cudnn.SpatialMaxPooling(2, 2, 2, 2, 0, 0):ceil()})
+table.insert(model, {'conv3_1', cudnn.SpatialConvolution(128, 256, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu3_1', cudnn.ReLU(true)})
+table.insert(model, {'conv3_2', cudnn.SpatialConvolution(256, 256, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu3_2', cudnn.ReLU(true)})
+table.insert(model, {'conv3_3', cudnn.SpatialConvolution(256, 256, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu3_3', cudnn.ReLU(true)})
+table.insert(model, {'pool3', cudnn.SpatialMaxPooling(2, 2, 2, 2, 0, 0):ceil()})
+table.insert(model, {'conv4_1', cudnn.SpatialConvolution(256, 512, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu4_1', cudnn.ReLU(true)})
+table.insert(model, {'conv4_2', cudnn.SpatialConvolution(512, 512, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu4_2', cudnn.ReLU(true)})
+table.insert(model, {'conv4_3', cudnn.SpatialConvolution(512, 512, 3, 3, 1, 1, 1, 1, 1)})
+table.insert(model, {'relu4_3', cudnn.ReLU(true)})
+table.insert(model, {'score-dsn4', cudnn.SpatialConvolution(512, 1, 1, 1, 1, 1, 0, 0, 1)})
+return model

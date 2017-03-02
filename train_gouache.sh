@@ -4,7 +4,7 @@ STYLE_IMAGE="gouache_house.jpg"
 STYLE_IMAGE_SIZE="384"
 
 CONTENT_WEIGHTS="1.0"
-STYLE_WEIGHTS="100.0"
+STYLE_WEIGHTS="50.0"
 
 th train.lua \
   -h5_file $DATAFILE \

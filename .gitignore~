@@ -6,3 +6,4 @@ data
 *.t7
 out
 *.h5
+*.json

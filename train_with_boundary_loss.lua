@@ -1,9 +1,16 @@
+--[[
+Modified from train.lua
+Aim to add boundary loss
+]]--
+
 require 'torch'
 require 'optim'
 require 'image'
+require 'loadcaffe'
+-- caffegraph = require 'caffegraph'
 
 require 'fast_neural_style.DataLoader'
-require 'fast_neural_style.PerceptualCriterion'
+require 'fast_neural_style.PerceptualWithBoundaryCriterion'
 
 local utils = require 'fast_neural_style.utils'
 local preprocess = require 'fast_neural_style.preprocess'
@@ -35,6 +42,8 @@ cmd:option('-tv_strength', 1e-6)
 -- Options for feature reconstruction loss
 cmd:option('-content_weights', '1.0')
 cmd:option('-content_layers', '16')
+cmd:option('-boundary_weights', '1.0')
+cmd:option('-boundary_layers', '5')
 cmd:option('-loss_network', 'models/vgg16.t7')
 
 -- Options for style reconstruction loss
@@ -76,6 +85,8 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
     utils.parse_layers(opt.content_layers, opt.content_weights)
   opt.style_layers, opt.style_weights =
     utils.parse_layers(opt.style_layers, opt.style_weights)
+  opt.boundary_layers, opt.boundary_weights =
+    utils.parse_layers(opt.boundary_layers, opt.boundary_weights)  
 
   -- Figure out preprocessing
   if not preprocess[opt.preprocessing] then
@@ -116,15 +127,25 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
   local percep_crit
   if opt.percep_loss_weight > 0 then
     local loss_net = torch.load(opt.loss_network)
+    print(loss_net)
+    -- local loss_boundary_net = caffe.Net('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel', 'test')
+    -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy_only_conv_layers.prototxt', './models/hed_model/hed_pretrained_only_conv1_to_conv5.caffemodel')
+    -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel')
+    local loss_boundary_net = loadcaffe.load('./models/hed_model/deploy_only_conv_layers.prototxt', './models/hed_model/hed_pretrained_only_conv1_to_score-dsn4.caffemodel', 'cudnn')
+    -- local loss_boundary_net = loadcaffe.load('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel', 'cudnn')
+    print(loss_boundary_net)
     local crit_args = {
       cnn = loss_net,
+      cnn_boundary = loss_boundary_net,
       style_layers = opt.style_layers,
       style_weights = opt.style_weights,
       content_layers = opt.content_layers,
       content_weights = opt.content_weights,
+      boundary_layers = opt.boundary_layers,
+      boundary_weights = opt.boundary_weights,
       agg_type = opt.style_target_type,
     }
-    percep_crit = nn.PerceptualCriterion(crit_args):type(dtype)
+    percep_crit = nn.PerceptualWithBoundaryCriterion(crit_args):type(dtype)
 
     if opt.task == 'style' then
       -- Load the style image and set it
@@ -194,7 +215,7 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
     -- Compute perceptual loss and gradient
     local percep_loss = 0
     if percep_crit then
-      local target = {content_target=y}
+      local target = {content_target=y,boundary_target=y}
       percep_loss = percep_crit:forward(out, target)
       percep_loss = percep_loss * opt.percep_loss_weight
       local grad_out_percep = percep_crit:backward(out, target)

@@ -7,3 +7,4 @@ data
 out
 *.h5
 *.json
+*.caffemodel

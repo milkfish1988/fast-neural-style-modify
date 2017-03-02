@@ -35,7 +35,17 @@ function ContentLoss:__init(strength, loss_type)
   end
 end
 
+--[[
+ - first, for a layer in nn:
+   'updateOutput(input)' will be called when doing 'forward(input)'
+   'updateOutput(input)' is used for custom the forward function;
 
+ - mode = 'capture', is to save target feature map:
+   the input is the feature map corresponding to the content target image;
+
+ - mode = 'loss', is to calculate loss between feature maps:
+   the input is the feature map corresponding to the generated image.
+--]]
 function ContentLoss:updateOutput(input)
   if self.mode == 'capture' then
     self.target:resizeAs(input):copy(input)
