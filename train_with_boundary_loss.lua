@@ -59,7 +59,7 @@ cmd:option('-upsample_factor', 4)
 -- Optimization
 cmd:option('-num_iterations', 40000)
 cmd:option('-max_train', -1)
-cmd:option('-batch_size', 4)
+cmd:option('-batch_size', 1)
 cmd:option('-learning_rate', 1e-3)
 cmd:option('-lr_decay_every', -1)
 cmd:option('-lr_decay_factor', 0.5)
@@ -71,7 +71,7 @@ cmd:option('-checkpoint_every', 1000)
 cmd:option('-num_val_batches', 10)
 
 -- Backend options
-cmd:option('-gpu', 0)
+cmd:option('-gpu', 1)
 cmd:option('-use_cudnn', 1)
 cmd:option('-backend', 'cuda', 'cuda|opencl')
 
@@ -86,7 +86,7 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
   opt.style_layers, opt.style_weights =
     utils.parse_layers(opt.style_layers, opt.style_weights)
   opt.boundary_layers, opt.boundary_weights =
-    utils.parse_layers(opt.boundary_layers, opt.boundary_weights)  
+    utils.parse_layers(opt.boundary_layers, opt.boundary_weights)
 
   -- Figure out preprocessing
   if not preprocess[opt.preprocessing] then
@@ -128,11 +128,14 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
   if opt.percep_loss_weight > 0 then
     local loss_net = torch.load(opt.loss_network)
     print(loss_net)
+    print('start loading')
     -- local loss_boundary_net = caffe.Net('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel', 'test')
     -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy_only_conv_layers.prototxt', './models/hed_model/hed_pretrained_only_conv1_to_conv5.caffemodel')
     -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel')
+    -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy_-to_test.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel')
     local loss_boundary_net = loadcaffe.load('./models/hed_model/deploy_only_conv_layers.prototxt', './models/hed_model/hed_pretrained_only_conv1_to_score-dsn4.caffemodel', 'cudnn')
     -- local loss_boundary_net = loadcaffe.load('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel', 'cudnn')
+    print('load finish')
     print(loss_boundary_net)
     local crit_args = {
       cnn = loss_net,
@@ -147,14 +150,14 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
     }
     percep_crit = nn.PerceptualWithBoundaryCriterion(crit_args):type(dtype)
 
-    if opt.task == 'style' then
-      -- Load the style image and set it
-      local style_image = image.load(opt.style_image, 3, 'float')
-      style_image = image.scale(style_image, opt.style_image_size)
-      local H, W = style_image:size(2), style_image:size(3)
-      style_image = preprocess.preprocess(style_image:view(1, 3, H, W))
-      percep_crit:setStyleTarget(style_image:type(dtype))
-    end
+    -- if opt.task == 'style' then
+    --   -- Load the style image and set it
+    --   local style_image = image.load(opt.style_image.."1.jpg", 3, 'float')
+    --   style_image = image.scale(style_image, opt.style_image_size)
+    --   local H, W = style_image:size(2), style_image:size(3)
+    --   style_image = preprocess.preprocess(style_image:view(1, 3, H, W))
+    --   percep_crit:setStyleTarget(style_image:type(dtype))
+    -- end
   end
 
   local loader = DataLoader(opt)
@@ -178,8 +181,19 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
     assert(x == params)
     grad_params:zero()
     
-    local x, y = loader:getBatch('train')
-    x, y = x:type(dtype), y:type(dtype)
+    local x, y, sidx = loader:getBatch('train')
+    x, y, sidx = x:type(dtype), y:type(dtype), sidx:type(dtype)
+    print('sidx:', sidx[1][1])
+
+    -- get a style image from style image set, feed into batch
+    local style_image_name = opt.style_image..tostring(sidx[1][1])..".jpg"
+    print(style_image_name)
+    local style_image = image.load(style_image_name, 3, 'float')
+    style_image = image.scale(style_image, opt.style_image_size)
+    local H, W = style_image:size(2), style_image:size(3)
+    style_image = preprocess.preprocess(style_image:view(1, 3, H, W))
+    s = torch.repeatTensor(style_image, opt.batch_size, 1, 1, 1)
+    percep_crit:setStyleTarget(s:type(dtype))
 
     -- Run model forward
     local out = model:forward(x)
@@ -278,33 +292,33 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
 
     if t % opt.checkpoint_every == 0 then
       -- Check loss on the validation set
-      loader:reset('val')
-      model:evaluate()
-      local val_loss = 0
-      print 'Running on validation set ... '
-      local val_batches = opt.num_val_batches
-      for j = 1, val_batches do
-        local x, y = loader:getBatch('val')
-        x, y = x:type(dtype), y:type(dtype)
-        local out = model:forward(x)
-        y = shave_y(x, y, out)
-        local pixel_loss = 0
-        if pixel_crit then
-          pixel_loss = pixel_crit:forward(out, y)
-          pixel_loss = opt.pixel_loss_weight * pixel_loss
-        end
-        local percep_loss = 0
-        if percep_crit then
-          percep_loss = percep_crit:forward(out, {content_target=y})
-          percep_loss = opt.percep_loss_weight * percep_loss
-        end
-        val_loss = val_loss + pixel_loss + percep_loss
-      end
-      val_loss = val_loss / val_batches
-      print(string.format('val loss = %f', val_loss))
-      table.insert(val_loss_history, val_loss)
-      table.insert(val_loss_history_ts, t)
-      model:training()
+      -- loader:reset('val')
+      -- model:evaluate()
+      -- local val_loss = 0
+      -- print 'Running on validation set ... '
+      -- local val_batches = opt.num_val_batches
+      -- for j = 1, val_batches do
+      --   local x, y = loader:getBatch('val')
+      --   x, y = x:type(dtype), y:type(dtype)
+      --   local out = model:forward(x)
+      --   y = shave_y(x, y, out)
+      --   local pixel_loss = 0
+      --   if pixel_crit then
+      --     pixel_loss = pixel_crit:forward(out, y)
+      --     pixel_loss = opt.pixel_loss_weight * pixel_loss
+      --   end
+      --   local percep_loss = 0
+      --   if percep_crit then
+      --     percep_loss = percep_crit:forward(out, {content_target=y})
+      --     percep_loss = opt.percep_loss_weight * percep_loss
+      --   end
+      --   val_loss = val_loss + pixel_loss + percep_loss
+      -- end
+      -- val_loss = val_loss / val_batches
+      -- print(string.format('val loss = %f', val_loss))
+      -- table.insert(val_loss_history, val_loss)
+      -- table.insert(val_loss_history_ts, t)
+      -- model:training()
 
       -- Save a JSON checkpoint
       local checkpoint = {

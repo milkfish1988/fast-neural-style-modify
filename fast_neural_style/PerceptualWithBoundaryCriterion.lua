@@ -172,7 +172,7 @@ function crit:updateOutput(input, target)
   end
   if target.boundary_target then
     self:setBoundaryTarget(target.boundary_target)
-  end  
+  end
   if target.style_target then
     self.setStyleTarget(target.style_target)
   end
@@ -217,6 +217,9 @@ function crit:updateOutput(input, target)
   end
   
   self.output = self.total_style_loss + self.total_content_loss + self.total_boundary_loss
+  print('total_style_loss: ', self.total_style_loss)
+  print('total_content_loss: ', self.total_content_loss)
+  print('total_boundary_loss: ', self.total_boundary_loss)
   return self.output
 end
 

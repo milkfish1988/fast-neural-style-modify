@@ -36,13 +36,24 @@ function DataLoader:__init(opt)
   end
   
   local train_size = self.h5_file:read(self.image_paths.train):dataspaceSize()
-  self.split_sizes = {
-    train = train_size[1],
-    val = self.h5_file:read(self.image_paths.val):dataspaceSize()[1],
-  }
+  print('train_size:', train_size)
+  if opt.h5_file == 'coco_train_with_style_idx_gb_20.h5' then
+    self.split_sizes = {
+      train = train_size[1],
+    }
+  else
+    self.split_sizes = {
+      train = train_size[1],
+      val = self.h5_file:read(self.image_paths.val):dataspaceSize()[1],
+    }    
+  end
   self.num_channels = train_size[2]
   self.image_height = train_size[3]
   self.image_width = train_size[4]
+
+  local train_sidx_size = self.h5_file:read('style_idx'):dataspaceSize()
+  print('train_sidx_size:', train_sidx_size)
+  self.sidx_dim2 = train_sidx_size[2]
 
   self.num_minibatches = {}
   for k, v in pairs(self.split_sizes) do
@@ -81,6 +92,10 @@ function DataLoader:getBatch(split)
                     {1, self.num_channels},
                     {1, self.image_height},
                     {1, self.image_width}):float():div(255)
+  -- load style image id
+  local sidx = self.h5_file:read('style_idx'):partial(
+                                             {start_idx, end_idx},
+                                             {1, self.sidx_dim2}):int()
 
   -- Advance counters, maybe rolling back to the start
   self.split_idxs[split] = end_idx + 1
@@ -105,7 +120,7 @@ function DataLoader:getBatch(split)
     return images_pre, y_images_pre
   elseif self.task == 'style' then
     -- For style transfer just return the images twice
-    return images_pre, images_pre
+    return images_pre, images_pre, sidx
   end
 end
 

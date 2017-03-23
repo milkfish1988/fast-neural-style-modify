@@ -5,6 +5,7 @@ from Queue import Queue
 import numpy as np
 from scipy.misc import imread, imresize
 import h5py
+import scipy.io
 
 """
 Create an HDF5 file of images for training a feedforward style transfer model.
@@ -38,6 +39,7 @@ def add_data(h5_file, image_dir, prefix, args):
   dset_name = os.path.join(prefix, 'images')
   dset_size = (num_images, 3, args.height, args.width)
   imgs_dset = h5_file.create_dataset(dset_name, dset_size, np.uint8)
+  style_idx_dset = h5_file.create_dataset('style_idx', (num_images,1), np.uint8)
   
   # input_queue stores (idx, filename) tuples,
   # output_queue stores (idx, resized_img) tuples
@@ -47,7 +49,7 @@ def add_data(h5_file, image_dir, prefix, args):
   # Read workers pull images off disk and resize them
   def read_worker():
     while True:
-      idx, filename = input_queue.get()
+      idx, filename, sidx = input_queue.get()
       img = imread(filename)
       try:
         # First crop the image so its size is a multiple of max_resize
@@ -61,13 +63,14 @@ def add_data(h5_file, image_dir, prefix, args):
         print img.shape, img.dtype
         print e
       input_queue.task_done()
-      output_queue.put((idx, img))
+      output_queue.put((idx, img, sidx))
   
   # Write workers write resized images to the hdf5 file
   def write_worker():
     num_written = 0
     while True:
-      idx, img = output_queue.get()
+      idx, img, sidx = output_queue.get()
+      style_idx_dset[idx] = sidx
       if img.ndim == 3:
         # RGB image, transpose from H x W x C to C x H x W
         imgs_dset[idx] = img.transpose(2, 0, 1)
@@ -90,21 +93,35 @@ def add_data(h5_file, image_dir, prefix, args):
   t = Thread(target=write_worker)
   t.daemon = True
   t.start()
-    
+  
+  #-- load style image name (also coco train2014) and cluster label (IDX)
+  mat_content = scipy.io.loadmat('/home/wzhang2/Dev/style-transfer/caffe/examples/style_idx_gb_20.mat')
+  IDX = np.array(mat_content['IDX'])
+  name_all = mat_content['name_all'].tolist()
+  name_all = [str(''.join(letter)) for letter_array in name_all[0] for letter in letter_array]
+  print(IDX[0][0], name_all[0])
+
+  #-- create a dict for image name and cluster label
+  name_and_sidx_dict = {}
+  name_and_sidx = zip(name_all, IDX)
+  for name, sidx in name_and_sidx:
+    name_and_sidx_dict[name] = sidx[0]
+
   for idx, filename in enumerate(image_list):
     if args.max_images > 0 and idx >= args.max_images: break
-    input_queue.put((idx, filename))
-    
+    image_name = filename.replace(args.train_dir, '')
+    print(image_name, name_and_sidx_dict[image_name])
+    input_queue.put((idx, filename, name_and_sidx_dict[image_name]))
+
   input_queue.join()
   output_queue.join()
-  
-  
-  
+
+
+
 if __name__ == '__main__':
-  
+
   with h5py.File(args.output_file, 'w') as f:
     add_data(f, args.train_dir, 'train2014', args)
 
     if args.include_val != 0:
       add_data(f, args.val_dir, 'val2014', args)
-
