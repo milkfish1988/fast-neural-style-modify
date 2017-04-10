@@ -8,3 +8,4 @@ out
 *.h5
 *.json
 *.caffemodel
+*.jpg

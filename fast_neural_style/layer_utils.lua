@@ -105,18 +105,24 @@ function M.insert_after(net, layer_string, new_layer)
   new_layer._ignore = true
   local nums = M.layer_string_to_nums(layer_string)
   local container = net
+  -- print('num: ', nums, '#num: ', #nums, '#container: ', #container)
   for i = 1, #nums do
+    -- print('i: ', i)
     local count = 0
     for j = 1, #container do
+      -- print('j: ', j)
       if not container:get(j)._ignore then
+        -- print('count: ', count)
         count = count + 1
       end
       if count == nums[i] then
         if i < #nums then
+          -- print('container get')
           container = container:get(j)
           break
         elseif i == #nums then
           container:insert(new_layer, j + 1)
+          -- print('container: ', container)
           return
         end
       end

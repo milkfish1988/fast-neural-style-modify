@@ -7,10 +7,12 @@ require 'torch'
 require 'optim'
 require 'image'
 require 'loadcaffe'
+require 'PredOriModel'
 -- caffegraph = require 'caffegraph'
 
 require 'fast_neural_style.DataLoader'
 require 'fast_neural_style.PerceptualWithBoundaryCriterion'
+
 
 local utils = require 'fast_neural_style.utils'
 local preprocess = require 'fast_neural_style.preprocess'
@@ -44,6 +46,8 @@ cmd:option('-content_weights', '1.0')
 cmd:option('-content_layers', '16')
 cmd:option('-boundary_weights', '1.0')
 cmd:option('-boundary_layers', '5')
+cmd:option('-ori_weights', '1.0')
+cmd:option('-ori_layers', '1')
 cmd:option('-loss_network', 'models/vgg16.t7')
 
 -- Options for style reconstruction loss
@@ -87,6 +91,8 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
     utils.parse_layers(opt.style_layers, opt.style_weights)
   opt.boundary_layers, opt.boundary_weights =
     utils.parse_layers(opt.boundary_layers, opt.boundary_weights)
+  opt.ori_layers, opt.ori_weights =
+    utils.parse_layers(opt.ori_layers, opt.ori_weights)    
 
   -- Figure out preprocessing
   if not preprocess[opt.preprocessing] then
@@ -126,26 +132,39 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
   -- Set up the perceptual loss function
   local percep_crit
   if opt.percep_loss_weight > 0 then
+    -- load style and content loss net
     local loss_net = torch.load(opt.loss_network)
+    print('****print style and content loss net: ')
     print(loss_net)
-    print('start loading')
-    -- local loss_boundary_net = caffe.Net('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel', 'test')
-    -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy_only_conv_layers.prototxt', './models/hed_model/hed_pretrained_only_conv1_to_conv5.caffemodel')
-    -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel')
-    -- local loss_boundary_net = caffegraph.load('./models/hed_model/deploy_-to_test.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel')
+
+    --load boundary loss net
     local loss_boundary_net = loadcaffe.load('./models/hed_model/deploy_only_conv_layers.prototxt', './models/hed_model/hed_pretrained_only_conv1_to_score-dsn4.caffemodel', 'cudnn')
-    -- local loss_boundary_net = loadcaffe.load('./models/hed_model/deploy.prototxt', './models/hed_model/hed_pretrained_bsds.caffemodel', 'cudnn')
-    print('load finish')
+    print('****print boundary loss net: ')
     print(loss_boundary_net)
+    
+    -- load ori loss net
+    local loss_ori_net = define_Ori_net()
+    print('****print ori loss net: ')
+    print(loss_ori_net)
+
+    -- load ori pred net
+    local pred_ori_net = loadcaffe.load('/home/wzhang2/Colorsketch/fast-neural-style/models/ori_pred_model/deploy_DSN1.prototxt', '/home/wzhang2/Colorsketch/fast-neural-style/models/ori_pred_model/hed_ft_ori.caffemodel', 'cudnn')
+    print('****print pred ori net: ')
+    print(pred_ori_net)
+
     local crit_args = {
       cnn = loss_net,
       cnn_boundary = loss_boundary_net,
+      cnn_ori = loss_ori_net,
+      cnn_pred_ori = pred_ori_net,
       style_layers = opt.style_layers,
       style_weights = opt.style_weights,
       content_layers = opt.content_layers,
       content_weights = opt.content_weights,
       boundary_layers = opt.boundary_layers,
       boundary_weights = opt.boundary_weights,
+      ori_layers = opt.ori_layers,
+      ori_weights = opt.ori_weights,
       agg_type = opt.style_target_type,
     }
     percep_crit = nn.PerceptualWithBoundaryCriterion(crit_args):type(dtype)
@@ -229,7 +248,7 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
     -- Compute perceptual loss and gradient
     local percep_loss = 0
     if percep_crit then
-      local target = {content_target=y,boundary_target=y}
+      local target = {content_target=y,boundary_target=y,ori_net_input=x}
       percep_loss = percep_crit:forward(out, target)
       percep_loss = percep_loss * opt.percep_loss_weight
       local grad_out_percep = percep_crit:backward(out, target)
