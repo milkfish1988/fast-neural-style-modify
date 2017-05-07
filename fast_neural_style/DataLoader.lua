@@ -37,7 +37,7 @@ function DataLoader:__init(opt)
   
   local train_size = self.h5_file:read(self.image_paths.train):dataspaceSize()
   print('train_size:', train_size)
-  if opt.h5_file == 'coco_train_with_style_idx_gb_20.h5' then
+  if opt.h5_file == 'coco_train_with_style_idx_coco_10.h5' then
     self.split_sizes = {
       train = train_size[1],
     }

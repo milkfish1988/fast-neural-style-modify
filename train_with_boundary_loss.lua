@@ -80,6 +80,12 @@ cmd:option('-use_cudnn', 1)
 cmd:option('-backend', 'cuda', 'cuda|opencl')
 
 
+function convertcudnn(net)
+  require 'cudnn'
+  require '/fast_neural_style/cudnn_convert_custom'
+  return cudnn_convert_custom(net, cudnn)
+end
+
  function main()
   local opt = cmd:parse(arg)
   print(opt)
@@ -92,7 +98,7 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
   opt.boundary_layers, opt.boundary_weights =
     utils.parse_layers(opt.boundary_layers, opt.boundary_weights)
   opt.ori_layers, opt.ori_weights =
-    utils.parse_layers(opt.ori_layers, opt.ori_weights)    
+    utils.parse_layers(opt.ori_layers, opt.ori_weights)
 
   -- Figure out preprocessing
   if not preprocess[opt.preprocessing] then
@@ -216,6 +222,8 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
 
     -- Run model forward
     local out = model:forward(x)
+    -- print('x: ', x:size())
+    -- print('out: ', out:size(), out:type())
     local grad_out = nil
 
     -- This is a bit of a hack: if we are using reflect-start padding and the
@@ -230,6 +238,8 @@ cmd:option('-backend', 'cuda', 'cuda|opencl')
     end
 
     y = shave_y(x, y, out)
+    -- print('y: ', y:size())
+    -- print('out: ', out:size(), out:type())
 
     -- Compute pixel loss and gradient
     local pixel_loss = 0

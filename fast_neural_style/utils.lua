@@ -136,6 +136,5 @@ function M.median_filter(img, r)
   return med[{{}, {}, {}, 1}]
 end
 
-
 return M
 

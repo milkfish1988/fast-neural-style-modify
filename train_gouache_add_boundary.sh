@@ -1,14 +1,14 @@
-DATAFILE="coco_train_with_style_idx_gb_20.h5"
+DATAFILE="coco_train_with_style_idx_coco_10.h5"
 STYLE_DIR="/home/wzhang2/Colorsketch/fast-neural-style/images/styles/"
 
-STYLE_IMAGE="style_image_20_bold/"
+STYLE_IMAGE="style_image_10/"
 STYLE_IMAGE_SIZE="384"
 STYLE_LAYERS='16,23'
 
 CONTENT_WEIGHTS="1.0"
-STYLE_WEIGHTS="0.0"
-BOUNDARY_WEIGHTS="1000"
-ORI_WEIGHTS="2000.0"
+STYLE_WEIGHTS="20.0"
+BOUNDARY_WEIGHTS="5000.0"
+ORI_WEIGHTS="0.0"
 
 CONTENT_LAYERS='21'
 BOUNDARY_LAYERS="24"

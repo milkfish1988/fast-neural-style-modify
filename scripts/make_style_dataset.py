@@ -95,7 +95,7 @@ def add_data(h5_file, image_dir, prefix, args):
   t.start()
   
   #-- load style image name (also coco train2014) and cluster label (IDX)
-  mat_content = scipy.io.loadmat('/home/wzhang2/Dev/style-transfer/caffe/examples/style_idx_gb_20.mat')
+  mat_content = scipy.io.loadmat('/home/wzhang2/Dev/style-transfer/caffe/examples/style_idx_coco_10.mat')
   IDX = np.array(mat_content['IDX'])
   name_all = mat_content['name_all'].tolist()
   name_all = [str(''.join(letter)) for letter_array in name_all[0] for letter in letter_array]

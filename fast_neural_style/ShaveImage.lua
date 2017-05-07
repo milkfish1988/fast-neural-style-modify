@@ -21,6 +21,11 @@ function layer:updateGradInput(input, gradOutput)
   local H, W = input:size(3), input:size(4)
   local s = self.size
   self.gradInput:resizeAs(input):zero()
+  -- if torch.eq(torch.LongTensor(self.gradInput:size()), torch.LongTensor(gradOutput:size())) then
+  --   self.gradInput[{{}, {}, {}, {}}]:copy(gradOutput)
+  -- else
+  --   self.gradInput[{{}, {}, {s + 1, H - s}, {s + 1, W - s}}]:copy(gradOutput)
+  -- end
   self.gradInput[{{}, {}, {s + 1, H - s}, {s + 1, W - s}}]:copy(gradOutput)
   return self.gradInput
 end

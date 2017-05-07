@@ -6,141 +6,161 @@ require 'fast_neural_style.InstanceNormalization'
 
 local M = {}
 
-
-local function build_conv_block(dim, padding_type, use_instance_norm)
+local function build_conv_block(dim_in, dim_out, padding_type, use_instance_norm, stride)
   local conv_block = nn.Sequential()
-  local p = 0
-  if padding_type == 'reflect' then
-    conv_block:add(nn.SpatialReflectionPadding(1, 1, 1, 1))
-  elseif padding_type == 'replicate' then
-    conv_block:add(nn.SpatialReplicationPadding(1, 1, 1, 1))
-  elseif padding_type == 'zero' then
-    p = 1
-  end
-  conv_block:add(nn.SpatialConvolution(dim, dim, 3, 3, 1, 1, p, p))
-  if use_instance_norm == 1 then
-    conv_block:add(nn.InstanceNormalization(dim))
-  else
-    conv_block:add(nn.SpatialBatchNormalization(dim))
-  end
+  conv_block:add(nn.SpatialConvolution(dim_in, dim_in, 3, 3, 1, 1, 1, 1))
+  conv_block:add(nn.InstanceNormalization(dim_in))
   conv_block:add(nn.ReLU(true))
-  if padding_type == 'reflect' then
-    conv_block:add(nn.SpatialReflectionPadding(1, 1, 1, 1))
-  elseif padding_type == 'replicate' then
-    conv_block:add(nn.SpatialReplicationPadding(1, 1, 1, 1))
+  if stride == 2 then
+    conv_block:add(nn.SpatialConvolution(dim_in, dim_out, 3, 3, 2, 2, 1, 1))
+    conv_block:add(nn.InstanceNormalization(dim_out))
+    conv_block:add(nn.ReLU(true))
   end
-  conv_block:add(nn.SpatialConvolution(dim, dim, 3, 3, 1, 1, p, p))
-  if use_instance_norm == 1 then
-    conv_block:add(nn.InstanceNormalization(dim))
-  else
-    conv_block:add(nn.SpatialBatchNormalization(dim))
-  end
+  conv_block:add(nn.SpatialConvolution(dim_out, dim_out, 3, 3, 1, 1, 1, 1))
+  conv_block:add(nn.InstanceNormalization(dim_out))
   return conv_block
 end
 
-
-local function build_res_block(dim, padding_type, use_instance_norm)
-  local conv_block = build_conv_block(dim, padding_type, use_instance_norm)
+local function build_res_block(dim_in, dim_out, padding_type, use_instance_norm, stride)
+  local conv_block = build_conv_block(dim_in, dim_out, padding_type, use_instance_norm, stride)
   local res_block = nn.Sequential()
   local concat = nn.ConcatTable()
   concat:add(conv_block)
-  if padding_type == 'none' or padding_type == 'reflect-start' then
-    concat:add(nn.ShaveImage(2))
+
+  if stride == 2 then
+    concat:add(nn.SpatialConvolution(dim_in, dim_out, 3, 3, 2, 2, 1, 1))
   else
-    concat:add(nn.Identity())
+    concat:add(nn.SpatialConvolution(dim_in, dim_out, 3, 3, 1, 1, 1, 1))
   end
   res_block:add(concat):add(nn.CAddTable())
   return res_block
 end
 
+-- function M.build_model(opt)
+--   local model = nn.Sequential()
+--   model:add(nn.SpatialConvolution(3, 32, 9, 9, 1, 1, 4, 4))
+--   model:add(nn.ReLU(true))
+--   model:add(nn.InstanceNormalization(32))
+
+--   layer = build_res_block(128, opt.padding_type, opt.use_instance_norm)
+
+--   seq4 = nn.Sequential()
+--   seq4:add(layer):add(nn.ReLU(true)):add(layer):add(nn.ReLU(true)):add(layer):add(nn.ReLU(true))
+
+--   seq4_ = nn.Sequential()
+--   seq4_:add(nn.SpatialConvolution(128, 128, 1, 1, 1, 1))
+--   seq4_:add(nn.ReLU(true))
+
+--   bch3 = nn.Concat(2)
+--   bch3:add(seq4)
+--   bch3:add(seq4_)
+
+--   seq3 = nn.Sequential()
+--   seq3:add(nn.SpatialConvolution(64, 128, 3, 3, 2, 2, 1, 1))
+--   seq3:add(nn.ReLU(true))
+--   seq3:add(nn.InstanceNormalization(128))
+--   seq3:add(bch3)
+--   seq3:add(nn.SpatialConvolution(256, 64, 3, 3, 1, 1, 1, 1))
+--   seq3:add(nn.ReLU(true))  
+--   seq3:add(nn.SpatialFullConvolution(64, 64, 3, 3, 2, 2, 1, 1, 1, 1))
+
+--   seq3_ = nn.Sequential()
+--   seq3_:add(nn.SpatialConvolution(64, 64, 1, 1, 1, 1))
+--   seq3_:add(nn.ReLU(true))
+
+--   bch2 = nn.Concat(2)
+--   bch2:add(seq3)
+--   bch2:add(seq3_)
+
+--   seq2 = nn.Sequential()
+--   seq2:add(nn.SpatialConvolution(32, 64, 3, 3, 2, 2, 1, 1))
+--   seq2:add(nn.ReLU(true))
+--   seq2:add(nn.InstanceNormalization(64))
+--   seq2:add(bch2)
+--   seq2:add(nn.SpatialConvolution(128, 32, 3, 3, 1, 1, 1, 1))
+--   seq2:add(nn.ReLU(true))  
+--   seq2:add(nn.SpatialFullConvolution(32, 32, 3, 3, 2, 2, 1, 1, 1, 1))
+
+--   seq2_ = nn.Sequential()
+--   seq2_:add(nn.SpatialConvolution(32, 32, 1, 1, 1, 1))
+--   seq2_:add(nn.ReLU(true))
+
+--   bch1 = nn.Concat(2)
+--   bch1:add(seq2)
+--   bch1:add(seq2_)
+
+--   model:add(bch1)
+--   model:add(nn.SpatialConvolution(64, 3, 9, 9, 1, 1, 4, 4))
+--   model:add(nn.Tanh())
+--   model:add(nn.MulConstant(opt.tanh_constant))
+--   model:add(nn.TotalVariation(opt.tv_strength))
+
+--   return model
+
+-- end
 
 function M.build_model(opt)
-  local arch = opt.arch:split(',')
-  local prev_dim = 3
   local model = nn.Sequential()
-  
-  for i, v in ipairs(arch) do
-    local first_char = string.sub(v, 1, 1)
-    local layer, next_dim
-    local needs_relu = true
-    local needs_bn = true
-    if first_char == 'c' then
-      -- Convolution
-      local f = tonumber(string.sub(v, 2, 2)) -- filter size
-      local p = (f - 1) / 2 -- padding
-      local s = tonumber(string.sub(v, 4, 4)) -- stride
-      next_dim = tonumber(string.sub(v, 6))
-      if opt.padding_type == 'reflect' then
-        model:add(nn.SpatialReflectionPadding(p, p, p, p))
-        p = 0
-      elseif opt.padding_type == 'replicate' then
-        model:add(nn.SpatialReplicationPadding(p, p, p, p))
-        p = 0
-      elseif padding_type == 'none' then
-        p = 0
-      end
-      layer = nn.SpatialConvolution(prev_dim, next_dim, f, f, s, s, p, p)
-    elseif first_char == 'f' then
-      -- Full convolution
-      local f = tonumber(string.sub(v, 2, 2)) -- filter size
-      local p = (f - 1) / 2 -- padding
-      local s = tonumber(string.sub(v, 4, 4)) -- stride
-      local a = s - 1 -- adjustment
-      next_dim = tonumber(string.sub(v, 6))
-      layer = nn.SpatialFullConvolution(prev_dim, next_dim,
-                                        f, f, s, s, p, p, a, a)
-    elseif first_char == 'd' then
-      -- Downsampling (strided convolution)
-      next_dim = tonumber(string.sub(v, 2))
-      layer = nn.SpatialConvolution(prev_dim, next_dim, 3, 3, 2, 2, 1, 1)
-    elseif first_char == 'U' then
-      -- Nearest-neighbor upsampling
-      next_dim = prev_dim
-      local scale = tonumber(string.sub(v, 2))
-      layer = nn.SpatialUpSamplingNearest(scale)
-    elseif first_char == 'u' then
-      -- Learned upsampling (strided full-convolution)
-      next_dim = tonumber(string.sub(v, 2))
-      layer = nn.SpatialFullConvolution(prev_dim, next_dim, 3, 3, 2, 2, 1, 1, 1, 1)
-    elseif first_char == 'C' then
-      -- Non-residual conv block
-      next_dim = tonumber(string.sub(v, 2))
-      layer = build_conv_block(next_dim, opt.padding_type, opt.use_instance_norm)
-      needs_bn = false
-      needs_relu = true
-    elseif first_char == 'R' then
-      -- Residual (non-bottleneck) block
-      next_dim = tonumber(string.sub(v, 2))
-      layer = build_res_block(next_dim, opt.padding_type, opt.use_instance_norm)
-      needs_bn = false
-      needs_relu = false
-    end
-    model:add(layer)
-    if i == #arch then
-      needs_relu = false
-      needs_bn = false
-    end
-    if needs_bn then
-      if opt.use_instance_norm == 1 then
-        model:add(nn.InstanceNormalization(next_dim))
-      else
-        model:add(nn.SpatialBatchNormalization(next_dim))
-      end
-    end
-    if needs_relu then
-      model:add(nn.ReLU(true))
-    end
+  model:add(nn.SpatialConvolution(3, 32, 9, 9, 1, 1, 4, 4))
+  model:add(nn.ReLU(true))
+  model:add(nn.InstanceNormalization(32))
 
-    prev_dim = next_dim
-  end
+  seq4 = nn.Sequential()
+  seq4:add(build_res_block(128, 128, opt.padding_type, opt.use_instance_norm, 1))
+  seq4:add(nn.ReLU(true))
+  seq4:add(build_res_block(128, 128, opt.padding_type, opt.use_instance_norm, 1))
+  seq4:add(nn.ReLU(true))
+  seq4:add(build_res_block(128, 128, opt.padding_type, opt.use_instance_norm, 1))
+  seq4:add(nn.ReLU(true))    
 
+  seq4_ = nn.Sequential()
+  seq4_:add(nn.SpatialConvolution(128, 128, 1, 1, 1, 1))
+  seq4_:add(nn.ReLU(true))
+
+  bch3 = nn.Concat(2)
+  bch3:add(seq4)
+  bch3:add(seq4_)
+
+  seq3 = nn.Sequential()
+  seq3:add(build_res_block(64, 128, opt.padding_type, opt.use_instance_norm, 2))
+  seq3:add(nn.ReLU(true))
+  seq3:add(bch3)
+  seq3:add(nn.SpatialConvolution(256, 64, 3, 3, 1, 1, 1, 1))
+  seq3:add(nn.ReLU(true))  
+  seq3:add(nn.SpatialFullConvolution(64, 64, 3, 3, 2, 2, 1, 1, 1, 1))
+
+  seq3_ = nn.Sequential()
+  seq3_:add(nn.SpatialConvolution(64, 64, 1, 1, 1, 1))
+  seq3_:add(nn.ReLU(true))
+
+  bch2 = nn.Concat(2)
+  bch2:add(seq3)
+  bch2:add(seq3_)
+
+  seq2 = nn.Sequential()
+  seq2:add(build_res_block(32, 64, opt.padding_type, opt.use_instance_norm, 2))
+  seq2:add(nn.ReLU(true))
+  seq2:add(bch2)
+  seq2:add(nn.SpatialConvolution(128, 32, 3, 3, 1, 1, 1, 1))
+  seq2:add(nn.ReLU(true))  
+  seq2:add(nn.SpatialFullConvolution(32, 32, 3, 3, 2, 2, 1, 1, 1, 1))
+
+  seq2_ = nn.Sequential()
+  seq2_:add(nn.SpatialConvolution(32, 32, 1, 1, 1, 1))
+  seq2_:add(nn.ReLU(true))
+
+  bch1 = nn.Concat(2)
+  bch1:add(seq2)
+  bch1:add(seq2_)
+
+  model:add(bch1)
+  model:add(nn.SpatialConvolution(64, 3, 9, 9, 1, 1, 4, 4))
   model:add(nn.Tanh())
   model:add(nn.MulConstant(opt.tanh_constant))
   model:add(nn.TotalVariation(opt.tv_strength))
 
   return model
+
 end
 
-
 return M
-
