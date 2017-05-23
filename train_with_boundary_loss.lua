@@ -56,6 +56,7 @@ cmd:option('-style_image_size', 256)
 cmd:option('-style_weights', '5.0')
 cmd:option('-style_layers', '4,9,16,23')
 cmd:option('-style_target_type', 'gram', 'gram|mean')
+cmd:option('-style_one_or_set', 'set')
 
 -- Upsampling options
 cmd:option('-upsample_factor', 4)
@@ -75,7 +76,7 @@ cmd:option('-checkpoint_every', 1000)
 cmd:option('-num_val_batches', 10)
 
 -- Backend options
-cmd:option('-gpu', 1)
+cmd:option('-gpu', 2)
 cmd:option('-use_cudnn', 1)
 cmd:option('-backend', 'cuda', 'cuda|opencl')
 
@@ -188,7 +189,6 @@ end
   local loader = DataLoader(opt)
   local params, grad_params = model:getParameters()
 
-
   local function shave_y(x, y, out)
     if opt.padding_type == 'none' then
       local H, W = x:size(3), x:size(4)
@@ -211,7 +211,14 @@ end
     print('sidx:', sidx[1][1])
 
     -- get a style image from style image set, feed into batch
-    local style_image_name = opt.style_image..tostring(sidx[1][1])..".jpg"
+    if opt.style_one_or_set == 'set' then
+      style_image_name = opt.style_image..tostring(sidx[1][1])..".jpg"
+    elseif opt.style_one_or_set == 'random' then
+      local randid = math.random(1,10)
+      style_image_name = opt.style_image..tostring(randid)..".jpg"
+    elseif opt.style_one_or_set == 'one' then
+      style_image_name = opt.style_image
+    end
     print(style_image_name)
     local style_image = image.load(style_image_name, 3, 'float')
     style_image = image.scale(style_image, opt.style_image_size)
@@ -295,6 +302,9 @@ end
     for i, k in ipairs(opt.content_layers) do
       style_loss_history[string.format('content-%d', k)] = {}
     end
+    for i, k in ipairs(opt.boundary_layers) do
+      style_loss_history[string.format('boundary-%d', k)] = {}
+    end
   end
 
   local style_weight = opt.style_weight
@@ -314,6 +324,10 @@ end
         table.insert(style_loss_history[string.format('content-%d', k)],
           percep_crit.content_losses[i])
       end
+      for i, k in ipairs(opt.boundary_layers) do
+        table.insert(style_loss_history[string.format('boundary-%d', k)],
+          percep_crit.boundary_losses[i])
+      end      
     end
 
     print(string.format('Epoch %f, Iteration %d / %d, loss = %f',

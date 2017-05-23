@@ -72,7 +72,7 @@ local function main()
   if use_cudnn then
     cudnn.convert(model, cudnn)
     cudnn.convert(loss_ori_net, cudnn):cuda()
-    cudnn.convert(pred_ori_net, cudnn):cuda()
+    -- cudnn.convert(pred_ori_net, cudnn):cuda()
     if opt.cudnn_benchmark == 0 then
       cudnn.benchmark = false
       cudnn.fastest = true
@@ -85,31 +85,33 @@ local function main()
   local function run_image(in_path, out_path)
     local img = image.load(in_path, 3)
     if opt.image_size > 0 then
-      img = image.scale(img, opt.image_size)
+      -- img = image.scale(img, opt.image_size)
+      -- img = image.scale(img, opt.image_size, opt.image_size)
+      img = image.scale(img, 256, 256)
     end
     local H, W = img:size(2), img:size(3)
 
-    local img_pre = preprocess.preprocess(img:view(1, 3, H, W)):type(dtype)
-    local timer = nil
-    if opt.timing == 1 then
-      -- Do an extra forward pass to warm up memory and cuDNN
-      model:forward(img_pre)
-      timer = torch.Timer()
-      if cutorch then cutorch.synchronize() end
-    end
-    local img_out = model:forward(img_pre)
+    local img_pre = preprocess.preprocess(img:view(1, 3, H, W))
+    -- local timer = nil
+    -- if opt.timing == 1 then
+    --   -- Do an extra forward pass to warm up memory and cuDNN
+    --   model:forward(img_pre)
+    --   timer = torch.Timer()
+    --   if cutorch then cutorch.synchronize() end
+    -- end
+    -- local img_out = model:forward(img_pre)
 
-    -- get ori 8ch predict
-    if opt.timing == 1 then
-      loss_ori_net:forward(img_out)
-    end
-    local ori_out_8 = loss_ori_net:forward(img_out)
-    print('ori_out_8: ', ori_out_8:size())
-    local maxval, ori_pred = torch.max(ori_out_8,2)
-    ori_pred = torch.div(ori_pred:float(), 8.0)
-    print('img_pre: ', img_pre:size(), 'ori_pred: ', ori_pred:size())
-    print('ori_pred: ', torch.min(ori_pred), torch.max(ori_pred))
-    print('type ', ori_pred:type())
+    -- -- get ori 8ch predict
+    -- if opt.timing == 1 then
+    --   loss_ori_net:forward(img_out)
+    -- end
+    -- local ori_out_8 = loss_ori_net:forward(img_out)
+    -- print('ori_out_8: ', ori_out_8:size())
+    -- local maxval, ori_pred = torch.max(ori_out_8,2)
+    -- ori_pred = torch.div(ori_pred:float(), 8.0)
+    -- print('img_pre: ', img_pre:size(), 'ori_pred: ', ori_pred:size())
+    -- print('ori_pred: ', torch.min(ori_pred), torch.max(ori_pred))
+    -- print('type ', ori_pred:type())
     -- local H, W = ori_pred:size(2), ori_pred:size(3)
     -- local HH, WW = img_pre:size(2), img_pre:size(3)
     -- local xs = (H - HH) / 2
@@ -117,10 +119,14 @@ local function main()
     -- ori_pred = ori_pred[{{}, {xs + 1, H - xs}, {ys + 1, W - ys}}][1]
 
     -- get ori predict
+    local timer = nil
     if opt.timing == 1 then
       pred_ori_net:forward(img_pre)
+      timer = torch.Timer()
+      if cutorch then cutorch.synchronize() end      
     end
-    local ori_out = pred_ori_net:forward(img_pre)
+    print(img_pre:size())
+    local ori_out = pred_ori_net:forward(img_pre:cuda())
     print('ori_out: ', ori_out:size())
     local maxval_org, ori_pred_org = torch.max(ori_out,2)
     ori_pred_org = torch.div(ori_pred_org:float(), 8.0)
@@ -162,6 +168,7 @@ local function main()
       if utils.is_image_file(fn) then
         local in_path = paths.concat(opt.input_dir, fn)
         local out_path = paths.concat(opt.output_dir, fn)
+        print(in_path, out_path)
         run_image(in_path, out_path)
       end
     end

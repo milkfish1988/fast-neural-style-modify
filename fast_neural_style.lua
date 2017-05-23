@@ -62,13 +62,14 @@ local function main()
   end
 
   local preprocess_method = checkpoint.opt.preprocessing or 'vgg'
+  print(preprocess_method)
   local preprocess = preprocess[preprocess_method]
 
   local function run_image(in_path, out_path)
     local img = image.load(in_path, 3)
     if opt.image_size > 0 then
       -- img = image.scale(img, opt.image_size)
-      img = image.scale(img, 768, 768)
+      img = image.scale(img, 512, 512)
     end
     local H, W = img:size(2), img:size(3)
 
